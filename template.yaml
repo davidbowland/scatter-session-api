@@ -1,0 +1,868 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Session API for scatter project
+
+Transform:
+  - AWS::Serverless-2016-10-31
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - prod
+      - test
+    Description: Environment for deploy
+  SmsApiKey:
+    Type: String
+    Description: API key for sms-queue-api
+
+Mappings:
+  EnvironmentMap:
+    prod:
+      certificateEdge: adce1a21-90b4-4120-8548-111215e582f0
+      certificateRegional: 5d4db894-c9fc-42ca-8f80-3c5da6c1678e
+      corsDomain: https://scatter.dbowland.com
+      decisionTable: scatter-session-api-decisions
+      domain: scatter-session-api.dbowland.com
+      domainInternal: scatter-session-api-internal.dbowland.com
+      logStreamFunction: log-subscriber
+      schedulerFunction: scheduler-service
+      sessionTable: scatter-session-api-sessions
+      smsApiUrl: https://sms-queue-api.dbowland.com/v1
+      userPool: us-east-2_rIhkYoKRN
+      userPoolClient: krttdn1ihnellg1lii31smlbu
+      zoneId: Z072422417XWM8PIXXSFA
+    test:
+      certificateEdge: 6a48cba7-feb9-4de5-8cbf-d383140fcdef
+      certificateRegional: 14a32175-0c26-4768-b71f-3fa611b8f5a2
+      corsDomain: https://scatter.bowland.link
+      decisionTable: scatter-session-api-decisions-test
+      domain: scatter-session-api.bowland.link
+      domainInternal: scatter-session-api-internal.bowland.link
+      logStreamFunction: log-subscriber-test
+      schedulerFunction: scheduler-service-test
+      sessionTable: scatter-session-api-sessions-test
+      smsApiUrl: https://sms-queue-api.bowland.link/v1
+      userPool: us-east-2_fHRxE57PQ
+      userPoolClient: 2ohhbe5r1085535mvdcmfhouaq
+      zoneId: Z01312547RGU1BYKIJXY
+
+Resources:
+  # API Gateway
+
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: v1
+      Auth:
+        ApiKeyRequired: true # sets for all methods
+        UsagePlan:
+          CreateUsagePlan: PER_API
+          Description: Usage plan for scatter-session-api
+      Domain:
+        DomainName: !FindInMap [EnvironmentMap, !Ref Environment, domainInternal]
+        CertificateArn: !Sub
+          - 'arn:aws:acm:us-east-1:${AWS::AccountId}:certificate/${Certificate}'
+          - Certificate: !FindInMap [EnvironmentMap, !Ref Environment, certificateEdge]
+        EndpointConfiguration: EDGE
+        Route53:
+          HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, zoneId]
+        BasePath:
+          - /v1
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub
+                - 'https://cognito-idp.us-east-2.amazonaws.com/${UserPool}'
+                - UserPool: !FindInMap [EnvironmentMap, !Ref Environment, userPool]
+              audience:
+                - !FindInMap [EnvironmentMap, !Ref Environment, userPoolClient]
+        DefaultAuthorizer: CognitoAuthorizer
+      CorsConfiguration:
+        AllowCredentials: true
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+          - X-Amz-Date
+          - X-Amz-Security-Token
+          - X-Api-Key
+        AllowMethods:
+          - DELETE
+          - GET
+          - OPTIONS
+          - PATCH
+          - POST
+          - PUT
+        AllowOrigins:
+          - !FindInMap [EnvironmentMap, !Ref Environment, corsDomain]
+      Domain:
+        BasePath:
+          - /v1
+        CertificateArn: !Sub
+          - 'arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/${Certificate}'
+          - Certificate: !FindInMap [EnvironmentMap, !Ref Environment, certificateRegional]
+        DomainName: !FindInMap [EnvironmentMap, !Ref Environment, domain]
+        EndpointConfiguration: REGIONAL
+      FailOnWarnings: true
+      StageName: v1
+
+  # SAM won't create two Route53 records, so the HttpApi domain name is created separately
+  HttpRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !Sub '${HttpApi.DomainName.RegionalDomainName}'
+        HostedZoneId: !Sub '${HttpApi.DomainName.RegionalHostedZoneId}'
+      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, zoneId]
+      Name: !FindInMap [EnvironmentMap, !Ref Environment, domain]
+      Type: A
+
+  # Lambda
+
+  DeleteItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/delete-item.deleteByIdHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api delete by ID
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/{sessionId}
+            Method: delete
+            Auth:
+              ApiKeyRequired: true
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  DeleteItemLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: DeleteItemFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${DeleteItemFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  DeleteItemLogGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref DeleteItemLogGroup
+
+  GetAllItemsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/get-all-items.getAllItemsHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 30
+      Description: scatter-session-api get all items
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions
+            Method: get
+            Auth:
+              ApiKeyRequired: true
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  GetAllItemsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: GetAllItemsFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GetAllItemsFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  GetAllItemsLogGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref GetAllItemsLogGroup
+
+  GetByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/get-by-id.getByIdHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api get by ID
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/{sessionId}
+            Method: get
+            Auth:
+              ApiKeyRequired: true
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{sessionId}
+            Method: get
+            Auth:
+              Authorizer: NONE
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  GetByIdLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: GetByIdFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GetByIdFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  GetByIdLogGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref GetByIdLogGroup
+
+  GetDecisionsByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/get-decisions-by-id.getDecisionsByIdHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api get decisions by ID
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DecisionTable
+      Environment:
+        Variables:
+          DYNAMODB_DECISION_TABLE_NAME: !Ref DecisionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/{sessionId}/decisions/{userId}
+            Method: get
+            Auth:
+              ApiKeyRequired: true
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{sessionId}/decisions/{userId}
+            Method: get
+            Auth:
+              Authorizer: NONE
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  GetDecisionsByIdLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: GetDecisionsByIdFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GetDecisionsByIdFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  GetDecisionsByIdLogGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref GetDecisionsByIdLogGroup
+
+  PatchItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/patch-item.patchItemHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api patch item
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/{sessionId}
+            Method: patch
+            Auth:
+              ApiKeyRequired: true
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{sessionId}
+            Method: patch
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PatchItemFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PatchItemFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PatchGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PatchLogGroup
+
+  PatchDecisionsItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/patch-decisions-by-id.patchDecisionByIdHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api patch item
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DecisionTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_DECISION_TABLE_NAME: !Ref DecisionTable
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/{sessionId}/decisions/{userId}
+            Method: patch
+            Auth:
+              ApiKeyRequired: true
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{sessionId}/decisions/{userId}
+            Method: patch
+            Auth:
+              Authorizer: NONE
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PatchDecisionsLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PatchDecisionsItemFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PatchDecisionsItemFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PatchDecisionsGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PatchDecisionsLogGroup
+
+  PostItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/post-item.postItemHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 90
+      Description: scatter-session-api post item
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+          ID_MIN_LENGTH: 3
+          ID_MAX_LENGTH: 4
+          SESSION_EXPIRE_HOURS: 24
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions
+            Method: post
+            Auth:
+              ApiKeyRequired: true
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PostLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PostItemFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PostItemFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PostGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PostLogGroup
+
+  PostPruneItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/post-start-prune.postStartPruneHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 60
+      Description: scatter-session-api post start prune
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DecisionTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          DYNAMODB_DECISION_TABLE_NAME: !Ref DecisionTable
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/start-prune
+            Method: post
+            Auth:
+              ApiKeyRequired: true
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PostPruneLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PostItemFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PostPruneItemFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PostPruneGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PostPruneLogGroup
+
+  PostSendTextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/post-send-text.postSendTextHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api post send text
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          CORS_DOMAIN: !FindInMap [EnvironmentMap, !Ref Environment, corsDomain]
+          SMS_API_KEY: !Ref SmsApiKey
+          SMS_API_URL: !FindInMap [EnvironmentMap, !Ref Environment, smsApiUrl]
+          USER_POOL_ID: !FindInMap [EnvironmentMap, !Ref Environment, userPool]
+      Events:
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{sessionId}/send-text
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PostSendTextLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PostSendTextFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PostSendTextFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PostSendTextGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PostSendTextLogGroup
+
+  PostSendTextToFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/post-send-text-to.postSendTextToHandler
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api post send text to
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          CORS_DOMAIN: !FindInMap [EnvironmentMap, !Ref Environment, corsDomain]
+          SMS_API_KEY: !Ref SmsApiKey
+          SMS_API_URL: !FindInMap [EnvironmentMap, !Ref Environment, smsApiUrl]
+          USER_POOL_ID: !FindInMap [EnvironmentMap, !Ref Environment, userPool]
+      Events:
+        Http:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{sessionId}/send-text/{toUserId}
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PostSendTextToLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PostSendTextToFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PostSendTextToFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PostSendTextToGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PostSendTextToLogGroup
+
+  PostUpdateStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/post-update-status.postUpdateStatus
+      CodeUri: './dist'
+      Runtime: nodejs14.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 10
+      Description: scatter-session-api post update status
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTable
+      Events:
+        ApiKey:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /sessions/{sessionId}/update-status
+            Method: post
+            Auth:
+              ApiKeyRequired: true
+      Tags:
+        'created-by': 'scatter-session-api'
+        'created-for': 'scatter'
+        'environment': !Ref Environment
+
+  PostUpdateStatusLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: PostUpdateStatusFunction
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${PostUpdateStatusFunction}
+      RetentionInDays: 30
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  PostUpdateStatusGroupSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub
+        - 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Function}'
+        - Function: !FindInMap [EnvironmentMap, !Ref Environment, logStreamFunction]
+      FilterPattern: '[timestamp, uuid, level="ERROR", message]'
+      LogGroupName: !Ref PostUpdateStatusLogGroup
+
+  # DynamoDB
+
+  DecisionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: SessionId
+          AttributeType: S
+        - AttributeName: UserId
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: SessionId
+          KeyType: HASH
+        - AttributeName: UserId
+          KeyType: RANGE
+      TableName: !FindInMap [EnvironmentMap, !Ref Environment, decisionTable]
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  SessionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: SessionId
+          AttributeType: S
+        - AttributeName: Expiration
+          AttributeType: N
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: ExpirationIndex
+          KeySchema:
+            - AttributeName: Expiration
+              KeyType: HASH
+          Projection:
+            NonKeyAttributes:
+              - SessionId
+            ProjectionType: INCLUDE
+      KeySchema:
+        - AttributeName: SessionId
+          KeyType: HASH
+      TableName: !FindInMap [EnvironmentMap, !Ref Environment, sessionTable]
+      Tags:
+        - Key: 'created-by'
+          Value: 'scatter-session-api'
+        - Key: 'created-for'
+          Value: 'scatter'
+        - Key: 'environment'
+          Value: !Ref Environment
+
+  # EventBridge
+
+  PruneEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Prunes old sessions from session table
+      ScheduleExpression: 'cron(34 8 1/3 * ? *)'
+      State: ENABLED
+      Targets:
+        - Arn: !Sub
+            - 'arn:aws:lambda:us-east-2:${AWS::AccountId}:function:${FunctionName}'
+            - FunctionName: !FindInMap [EnvironmentMap, !Ref Environment, schedulerFunction]
+          Id: SchedulerLambda
+          InputTransformer:
+            InputPathsMap:
+              'resources': '$.resources'
+            InputTemplate: !Sub
+              - |
+                {
+                  "resources": <resources>,
+                  "request": {
+                    "url": "https://${Domain}/v1/sessions/start-prune",
+                    "method": "POST",
+                    "data": { }
+                  },
+                  "apiKey": {
+                    "id": "${ApiKey}",
+                    "region": "us-east-2"
+                  }
+                }
+              - ApiKey: !Sub '${Api.ApiKey.APIKeyId}'
+                Domain: !FindInMap [EnvironmentMap, !Ref Environment, domainInternal]

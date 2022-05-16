@@ -1,0 +1,12 @@
+{
+  "body": "{\"address\":\"Columbia, MO 65203, USA\",\"rounds\":2,\"timeLimit\":30,\"userCount\":2}",
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/v1/sessions"
+    }
+  },
+  "headers": {
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2NvZ25pdG8taWRwLnVzLWVhc3QtMi5hbWF6b25hd3MuY29tL3VzLWVhc3QtMl9mSFJ4RTU3UFEiLCJpYXQiOjE2NTI2OTEwMDAsImV4cCI6MTY4NDIyNzAwMCwiYXVkIjoic2NhdHRlci5kYm93bGFuZC5jb20iLCJzdWIiOiJlZmQzMWI2Ny0xOWYyLTRkMGEtYTcyMy03ODUwNmZmYzBiN2UiLCJuYW1lIjoiRGF2ZSIsImNvZ25pdG86dXNlcm5hbWUiOiJlZmQzMWI2Ny0xOWYyLTRkMGEtYTcyMy03ODUwNmZmYzBiN2UiLCJwaG9uZV9udW1iZXIiOiIrMTU1NTEyMzQ1NjciLCJwaG9uZV9udW1iZXJfdmVyaWZpZWQiOiJ0cnVlIiwidG9rZW5fdXNlIjoiaWQifQ.Q1PeDQ5SNMWTYldSu-TxTPWAa5DaO-Z3WgBm_bKzZnA"
+  }
+}

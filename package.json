@@ -1,0 +1,66 @@
+{
+  "name": "scatter-session-api",
+  "version": "1.0.0",
+  "description": "Lambda scatter session API",
+  "author": "David Bowland",
+  "engines": {
+    "node": "^14.0.0"
+  },
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidbowland/scatter-session-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/davidbowland/scatter-session-api/issues"
+  },
+  "homepage": "https://github.com/davidbowland/scatter-session-api#readme",
+  "scripts": {
+    "build": "npm run clean && tsc && cp package*.json dist/ && cd dist/ && HUSKY=0 NODE_ENV=production npm ci",
+    "clean": "rm -rf .aws-sam dist coverage && NODE_ENV=test npm ci",
+    "deploy": "npm run build && ./scripts/deploy.sh",
+    "lint": "prettier --write . && eslint --fix . --resolve-plugins-relative-to .",
+    "prepare": "if [ \"$NODE_ENV\" != \"production\" ]; then husky install ; fi",
+    "start": "npm run build && npm run quick-start",
+    "quick-start": "tsc && ./scripts/runLocal.sh",
+    "test": "jest --colors"
+  },
+  "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.3.10",
+    "aws-sdk": "^2.923.0",
+    "axios": "^0.26.0",
+    "axios-retry": "^3.2.4",
+    "fast-json-patch": "^3.1.0",
+    "jsonwebtoken": "^8.5.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.14.5",
+    "@babel/preset-env": "^7.14.5",
+    "@babel/preset-typescript": "^7.14.5",
+    "@types/aws-lambda": "^8.10.77",
+    "@types/jest": "^26.0.23",
+    "@types/node": "^15.12.2",
+    "@typescript-eslint/eslint-plugin": "^4.26.0",
+    "@typescript-eslint/parser": "^4.26.0",
+    "babel-jest": "^27.4.4",
+    "eslint": "^7.28.0",
+    "eslint-config-prettier": "^8.3.0",
+    "husky": "^7.0.1",
+    "jest": "^27.4.4",
+    "lint-staged": "^11.0.0",
+    "msw": "^0.36.8",
+    "prettier": "^2.3.1",
+    "ts-node": "^10.2.1",
+    "typescript": "^4.5.2"
+  },
+  "lint-staged": {
+    "**/*.{js,jsx,ts,tsx}": [
+      "prettier --write --ignore-unknown",
+      "eslint --resolve-plugins-relative-to . --fix",
+      "jest --colors --findRelatedTests --coverageThreshold '{}'"
+    ],
+    "**/*": [
+      "prettier --write --ignore-unknown"
+    ]
+  }
+}
