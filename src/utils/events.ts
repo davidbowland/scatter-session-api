@@ -13,8 +13,8 @@ export const formatSession = (session: NewSession): NewSession => {
   if (session.expiration !== undefined && session.expiration > lastExpiration) {
     throw new Error('expiration is outside acceptable range')
   }
-  if (session.rounds === undefined || session.rounds < 1 || session.rounds > 3) {
-    throw new Error('rounds must be 1 thru 3')
+  if (session.rounds === undefined || session.rounds < 1 || session.rounds > 5) {
+    throw new Error('rounds must be 1 thru 5')
   }
   if (session.timeLimit === undefined || session.timeLimit < 30 || session.timeLimit > 300) {
     throw new Error('timeLimit must be 30 thru 300')
