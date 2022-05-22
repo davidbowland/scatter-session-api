@@ -14,7 +14,7 @@ export interface CategoriesObject {
 }
 
 export interface CategoryPoints {
-  [key: number]: boolean
+  [key: number]: number
 }
 
 export interface CategoryPointsObject {

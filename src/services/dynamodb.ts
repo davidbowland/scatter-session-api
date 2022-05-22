@@ -52,7 +52,7 @@ export const getDecisionById = (sessionId: string, userId: string): Promise<Deci
     .promise()
     .then((response) => response.Item.Data.S)
     .then(JSON.parse)
-    .catch(() => ({ decisions: [] }))
+    .catch(() => ({ points: {}, responses: {} }))
 
 export const getSessionById = (sessionId: string): Promise<Session> =>
   dynamodb

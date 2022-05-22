@@ -22,7 +22,7 @@ export const postSendTextToHandler = async (event: APIGatewayProxyEventV2): Prom
       toUserId,
       `${jwtPayload.name} (${
         jwtPayload.phone_number
-      }) is inviting you to vote: ${corsDomain}/s/${sessionId}?u=${encodeURIComponent(toUserId)}`
+      }) is inviting you to play: ${corsDomain}/s/${sessionId}?u=${encodeURIComponent(toUserId)}`
     )
 
     return status.NO_CONTENT

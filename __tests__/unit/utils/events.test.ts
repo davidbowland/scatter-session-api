@@ -17,7 +17,7 @@ describe('events', () => {
       expect(() => formatSession(tooLateExpirationSession)).toThrow()
     })
 
-    test.each([undefined, 0, 4])('expect error on invalid rounds (%s)', (rounds) => {
+    test.each([undefined, 0, 6])('expect error on invalid rounds (%s)', (rounds) => {
       const invalidSession = { ...newSession, rounds } as NewSession
       expect(() => formatSession(invalidSession)).toThrow()
     })

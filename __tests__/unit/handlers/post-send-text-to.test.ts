@@ -44,7 +44,7 @@ describe('post-send-text-to', () => {
       const result = await postSendTextToHandler(event)
       expect(mocked(queue).sendSms).toHaveBeenCalledWith(
         '+18005556789',
-        'Dave (+15551234567) is inviting you to vote: http://scatter.bowland.link/s/abc123?u=%2B18005556789'
+        'Dave (+15551234567) is inviting you to play: http://scatter.bowland.link/s/abc123?u=%2B18005556789'
       )
       expect(result).toEqual(status.NO_CONTENT)
     })
