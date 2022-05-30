@@ -55,10 +55,14 @@ describe('sessions', () => {
         ...decisions,
         points: {
           '+15551234567': {
-            1: true,
+            N: {
+              '1': 1,
+            },
           },
           '+15551234568': {
-            1: false,
+            N: {
+              '1': 2,
+            },
           },
         },
       } as Decisions
@@ -68,10 +72,20 @@ describe('sessions', () => {
         mocked(dynamodb).getDecisionById.mockResolvedValue(pointedDecisions)
       })
 
+      test('expect not enough players does not change session', async () => {
+        const noDecisions = {
+          ...decisions,
+          points: {},
+        } as Decisions
+        mocked(dynamodb).getDecisionById.mockResolvedValueOnce(noDecisions)
+        const result = await updateSessionStatus(sessionId, pointingSession)
+        expect(result).toEqual(pointingSession)
+      })
+
       test('expect winner calculated and status changed', async () => {
         const result = await updateSessionStatus(sessionId, pointingSession)
         expect(result).toEqual(expect.objectContaining({ status: 'winner' }))
-        expect(result.winners).toEqual(['+15551234567'])
+        expect(result.winners).toEqual(['+15551234568'])
       })
     })
   })

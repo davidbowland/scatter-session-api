@@ -5,10 +5,13 @@ const areResponsesComplete = (categories: CategoriesObject, responses: StringObj
   Object.keys(categories).every((letter) => letter in responses)
 
 const extractPositivePoints = (points: StringObject): number =>
-  Object.keys(points).filter((index) => points[index]).length
+  Object.keys(points).reduce((previous, index) => previous + points[index], 0)
+
+const extractLetterPoints = (points: StringObject): number =>
+  Object.keys(points).reduce((previous, letter) => previous + extractPositivePoints(points[letter]), 0)
 
 const countPointsForUser = (userId: string, points: CategoryPointsObject[]): number =>
-  points.reduce((total, currentPoints) => total + extractPositivePoints(currentPoints[userId]), 0)
+  points.reduce((total, currentPoints) => total + extractLetterPoints(currentPoints[userId]), 0)
 
 export const updateSessionStatus = async (sessionId: string, session: Session): Promise<Session> => {
   const decisionIds = await queryUserIdsBySessionId(sessionId)
@@ -27,6 +30,11 @@ export const updateSessionStatus = async (sessionId: string, session: Session): 
   }
 
   const allPoints = allDecisions.map((decision) => decision.points)
+  const allPointingComplete = allPoints.filter((points) => Object.keys(points).length > 0)
+  if (allPointingComplete.length < session.userCount) {
+    return session
+  }
+
   const totalPoints: { [key: string]: number } = decisionIds.reduce(
     (prev, userId) => ({ ...prev, [userId]: countPointsForUser(userId, allPoints) }),
     {}

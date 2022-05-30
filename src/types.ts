@@ -14,7 +14,9 @@ export interface CategoriesObject {
 }
 
 export interface CategoryPoints {
-  [key: number]: number
+  [key: string]: {
+    [key: string]: number
+  }
 }
 
 export interface CategoryPointsObject {
