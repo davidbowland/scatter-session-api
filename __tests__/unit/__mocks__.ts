@@ -25,6 +25,7 @@ export const session: Session = {
   owner: 'efd31b67-19f2-4d0a-a723-78506ffc0b7e',
   rounds: 1,
   status: 'playing',
+  textUpdates: true,
   timeLimit: 30,
   userCount: 2,
 }
