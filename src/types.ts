@@ -31,6 +31,7 @@ export interface Decisions {
 export interface NewSession {
   expiration?: number
   rounds: number
+  textUpdates?: boolean
   timeLimit: number
   userCount: number
 }
@@ -40,6 +41,7 @@ export interface Session extends NewSession {
   expiration: number
   owner: string
   status: 'playing' | 'pointing' | 'winner'
+  textUpdates: boolean
   winners?: string[]
 }
 

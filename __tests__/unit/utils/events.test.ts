@@ -37,6 +37,12 @@ describe('events', () => {
       expect(result).toEqual(expect.objectContaining(newSession))
       expect(result.expiration).toBeGreaterThan(new Date().getTime())
     })
+
+    test('expect optional parameters returned', () => {
+      const optionalSession = { ...newSession, expiration: new Date().getTime(), textUpdates: true }
+      const result = formatSession(optionalSession)
+      expect(result).toEqual(expect.objectContaining(optionalSession))
+    })
   })
 
   describe('extractNewSessionFromEvent', () => {

@@ -1,17 +1,21 @@
 import { mocked } from 'jest-mock'
 
 import * as dynamodb from '@services/dynamodb'
+import * as queue from '@services/queue'
 import { Decisions, Session } from '@types'
 import { decisions, session, sessionId, userId } from '../__mocks__'
 import { updateSessionStatus } from '@utils/session'
 
 jest.mock('@services/dynamodb')
+jest.mock('@services/queue')
 jest.mock('@utils/logging')
 
 describe('sessions', () => {
+  const validPhoneNumber = '+18008675309'
+
   beforeAll(() => {
     mocked(dynamodb).getDecisionById.mockResolvedValue(decisions)
-    mocked(dynamodb).queryUserIdsBySessionId.mockResolvedValue(['+15551234567', '+15551234568'])
+    mocked(dynamodb).queryUserIdsBySessionId.mockResolvedValue(['+15551234567', validPhoneNumber])
   })
 
   describe('updateSessionStatus', () => {
@@ -46,7 +50,13 @@ describe('sessions', () => {
 
       test('expect status changed when enough responses', async () => {
         const result = await updateSessionStatus(sessionId, playingSession)
-        expect(result).toEqual({ ...playingSession, status: 'pointing' })
+        expect(result).toEqual(expect.objectContaining({ status: 'pointing' }))
+      })
+
+      test('expect text messages sent when status changed', async () => {
+        const result = await updateSessionStatus(sessionId, playingSession)
+        expect(result).toEqual(expect.objectContaining({ status: 'pointing' }))
+        expect(mocked(queue).sendSms).toHaveBeenCalledWith(validPhoneNumber, expect.stringContaining(sessionId))
       })
     })
 
@@ -59,7 +69,7 @@ describe('sessions', () => {
               '1': 1,
             },
           },
-          '+15551234568': {
+          [validPhoneNumber]: {
             N: {
               '1': 2,
             },
@@ -85,7 +95,13 @@ describe('sessions', () => {
       test('expect winner calculated and status changed', async () => {
         const result = await updateSessionStatus(sessionId, pointingSession)
         expect(result).toEqual(expect.objectContaining({ status: 'winner' }))
-        expect(result.winners).toEqual(['+15551234568'])
+        expect(result.winners).toEqual([validPhoneNumber])
+      })
+
+      test('expect text messages sent when status changed', async () => {
+        const result = await updateSessionStatus(sessionId, pointingSession)
+        expect(result).toEqual(expect.objectContaining({ status: 'winner' }))
+        expect(mocked(queue).sendSms).toHaveBeenCalledWith(validPhoneNumber, expect.stringContaining(sessionId))
       })
     })
   })

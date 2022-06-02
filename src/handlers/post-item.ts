@@ -251,6 +251,7 @@ const createNewSession = async (newSession: NewSession, owner?: string): Promise
       owner,
       rounds: newSession.rounds,
       status: 'playing',
+      textUpdates: newSession.textUpdates,
       timeLimit: newSession.timeLimit,
       userCount: newSession.userCount,
     }

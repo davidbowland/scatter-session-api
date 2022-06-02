@@ -36,7 +36,10 @@ const patchById = async (
     const session = await getSessionById(sessionId)
     if (subject && session.owner !== subject) {
       return status.FORBIDDEN
-    } else if (subject && !patchOperations.every((value) => value.path === '/userCount')) {
+    } else if (
+      subject &&
+      !patchOperations.every((value) => value.path === '/userCount' || value.path === '/textUpdates')
+    ) {
       return status.FORBIDDEN
     }
     try {

@@ -25,6 +25,7 @@ export const formatSession = (session: NewSession): NewSession => {
   return {
     expiration: session.expiration ?? lastExpiration,
     rounds: session.rounds,
+    textUpdates: session.textUpdates ?? false,
     timeLimit: session.timeLimit,
     userCount: session.userCount,
   }

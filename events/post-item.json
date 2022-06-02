@@ -1,5 +1,5 @@
 {
-  "body": "{\"address\":\"Columbia, MO 65203, USA\",\"rounds\":2,\"timeLimit\":30,\"userCount\":2}",
+  "body": "{\"address\":\"Columbia, MO 65203, USA\",\"rounds\":2,\"textUpdates\":true,\"timeLimit\":30,\"userCount\":2}",
   "requestContext": {
     "http": {
       "method": "POST",

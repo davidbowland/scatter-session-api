@@ -447,8 +447,11 @@ Resources:
             TableName: !Ref SessionTable
       Environment:
         Variables:
+          CORS_DOMAIN: !FindInMap [EnvironmentMap, !Ref Environment, corsDomain]
           DYNAMODB_DECISION_TABLE_NAME: !Ref DecisionTable
           DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+          SMS_API_KEY: !Ref SmsApiKey
+          SMS_API_URL: !FindInMap [EnvironmentMap, !Ref Environment, smsApiUrl]
       Events:
         ApiKey:
           Type: Api
@@ -744,7 +747,16 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
         - DynamoDBCrudPolicy:
+            TableName: !Ref DecisionTable
+        - DynamoDBCrudPolicy:
             TableName: !Ref SessionTable
+      Environment:
+        Variables:
+          CORS_DOMAIN: !FindInMap [EnvironmentMap, !Ref Environment, corsDomain]
+          DYNAMODB_DECISION_TABLE_NAME: !Ref DecisionTable
+          DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
+          SMS_API_KEY: !Ref SmsApiKey
+          SMS_API_URL: !FindInMap [EnvironmentMap, !Ref Environment, smsApiUrl]
       Events:
         ApiKey:
           Type: Api
