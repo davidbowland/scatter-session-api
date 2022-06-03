@@ -517,7 +517,7 @@ Resources:
           DYNAMODB_SESSION_TABLE_NAME: !Ref SessionTable
           ID_MIN_LENGTH: 3
           ID_MAX_LENGTH: 4
-          SESSION_EXPIRE_HOURS: 72
+          SESSION_EXPIRE_HOURS: 120
       Events:
         ApiKey:
           Type: Api
@@ -855,7 +855,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: Prunes old sessions from session table
-      ScheduleExpression: 'cron(58 8 2/5 * ? *)'
+      ScheduleExpression: 'cron(58 8 2/3 * ? *)'
       State: ENABLED
       Targets:
         - Arn: !Sub
