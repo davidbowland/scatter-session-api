@@ -43,7 +43,7 @@ export const updateSessionStatus = async (sessionId: string, session: Session): 
 
   const allPoints = allDecisions.map((decision) => decision.points)
   const allPointingComplete = allPoints.filter((points) => Object.keys(points).length > 0)
-  if (allPointingComplete.length < session.userCount) {
+  if (allPointingComplete.length < decisionIds.length) {
     return session
   }
 
