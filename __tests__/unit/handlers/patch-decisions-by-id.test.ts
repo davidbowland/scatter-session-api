@@ -74,6 +74,19 @@ describe('patch-decisions-by-id', () => {
       expect(mocked(dynamodb).setDecisionById).toHaveBeenCalledWith(sessionId, userId, expectedResult)
     })
 
+    test('expect updated object does not contain points for current userId', async () => {
+      const pointingEvent = {
+        ...event,
+        body: JSON.stringify([{ op: 'add', path: `/points/${userId}`, value: { P: { 1: 1 } } }]),
+      }
+      await patchDecisionByIdHandler(pointingEvent)
+      expect(mocked(dynamodb).setDecisionById).toHaveBeenCalledWith(
+        sessionId,
+        userId,
+        expect.objectContaining({ points: {} })
+      )
+    })
+
     test('expect updateSessionStatus invoked', async () => {
       await patchDecisionByIdHandler(event)
       expect(mocked(sessionUtils).updateSessionStatus).toHaveBeenCalledWith(sessionId, session)

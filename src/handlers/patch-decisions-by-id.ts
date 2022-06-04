@@ -20,6 +20,7 @@ const applyJsonPatch = async (
     throwOnInvalidJsonPatch,
     mutateObjectOnJsonPatch
   ).newDocument
+  delete updatedDecision.points[userId]
 
   try {
     log('Updated decision', { prevDecision: decision, sessionId, updatedDecision, userId })
