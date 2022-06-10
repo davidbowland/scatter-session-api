@@ -202,5 +202,24 @@ describe('dynamodb', () => {
         TableName: 'session-table',
       })
     })
+
+    test('expect expiration defaults to 0', async () => {
+      const noExpirationSession = { ...session, expiration: undefined }
+      await setSessionById(sessionId, noExpirationSession)
+      expect(mockPutItem).toHaveBeenCalledWith({
+        Item: {
+          Data: {
+            S: JSON.stringify(noExpirationSession),
+          },
+          Expiration: {
+            N: '0',
+          },
+          SessionId: {
+            S: `${sessionId}`,
+          },
+        },
+        TableName: 'session-table',
+      })
+    })
   })
 })

@@ -24,7 +24,9 @@ describe('patch-item', () => {
 
   describe('patchItemHandler', () => {
     test('expect BAD_REQUEST when unable to parse body', async () => {
-      mocked(events).extractJsonPatchFromEvent.mockRejectedValueOnce('Bad request')
+      mocked(events).extractJsonPatchFromEvent.mockImplementationOnce(() => {
+        throw new Error('Bad request')
+      })
       const result = await patchItemHandler(event)
       expect(result).toEqual(expect.objectContaining({ statusCode: status.BAD_REQUEST.statusCode }))
     })

@@ -44,7 +44,9 @@ describe('patch-decisions-by-id', () => {
     })
 
     test('expect BAD_REQUEST when unable to parse body', async () => {
-      mocked(events).extractJsonPatchFromEvent.mockRejectedValueOnce('Bad request')
+      mocked(events).extractJsonPatchFromEvent.mockImplementationOnce(() => {
+        throw new Error('Bad request')
+      })
       const result = await patchDecisionByIdHandler(event)
       expect(result).toEqual(expect.objectContaining({ statusCode: status.BAD_REQUEST.statusCode }))
     })
