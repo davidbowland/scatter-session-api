@@ -25,6 +25,9 @@ jest.mock('aws-sdk', () => ({
     scan: (...args) => ({ promise: () => mockScanTable(...args) }),
   })),
 }))
+jest.mock('@utils/logging', () => ({
+  xrayCapture: jest.fn().mockImplementation((x) => x),
+}))
 
 describe('dynamodb', () => {
   describe('deleteDecisionById', () => {

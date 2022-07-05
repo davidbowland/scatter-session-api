@@ -2,8 +2,9 @@ import { DynamoDB } from 'aws-sdk'
 
 import { Decisions, Session, SessionBatch } from '../types'
 import { dynamodbDecisionTableName, dynamodbSessionTableName } from '../config'
+import { xrayCapture } from '../utils/logging'
 
-const dynamodb = new DynamoDB({ apiVersion: '2012-08-10' })
+const dynamodb = xrayCapture(new DynamoDB({ apiVersion: '2012-08-10' }))
 
 /* Delete item */
 
